@@ -128,11 +128,10 @@ imshow(out, title=[class_names[x] for x in classes])
 
 #### Finetuning the convnet ####
 # Load a pretrained model and reset final fully connected layer.
-model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-num_ftrs = model.fc.in_features
+model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
-model.fc = nn.Linear(num_ftrs, 2)
+model.fc = nn.Linear(4096, 2)
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
@@ -151,23 +150,22 @@ optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 step_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
-model = train_model(model, criterion, optimizer, 
-                    step_lr_scheduler, num_epochs=20)
+#model = train_model(model, criterion, optimizer, 
+#                    step_lr_scheduler, num_epochs=20)
 
 #### ConvNet as fixed feature extractor ####
 # Here, we need to freeze all the network except the final layer.
 # We need to set requires_grad == False to freeze the parameters so that the gradients are not computed in backward()
-model_conv = torchvision.models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+model_conv = torchvision.models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 for param in model_conv.parameters():
     param.requires_grad = False
 
 # Parameters of newly constructed modules have requires_grad=True by default
-num_ftrs = model_conv.fc.in_features
-model_conv.fc = nn.Linear(num_ftrs, 2)
+model_conv.classifier[-1] = nn.Linear(4096, 2)
 model_conv = model_conv.to(device)
 
 
-optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.01)
+optimizer_conv = optim.SGD(model_conv.classifier.parameters(), lr=0.01)
 
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 
