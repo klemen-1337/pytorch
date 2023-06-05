@@ -9,38 +9,7 @@ import matplotlib.pyplot as plt
 import time
 import os
 import copy
-
-mean = np.array([0.5, 0.5, 0.5])
-std = np.array([0.25, 0.25, 0.25])
-
-data_transforms = {
-    'train': transforms.Compose([
-        transforms.RandomResizedCrop(224),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std)
-    ]),
-    'val': transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std)
-    ]),
-}
-
-data_dir = 'data/transfer_learning'
-image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
-                                          data_transforms[x])
-                  for x in ['train', 'val']}
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4,
-                                             shuffle=True, num_workers=0)
-              for x in ['train', 'val']}
-dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
-class_names = image_datasets['train'].classes
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(class_names)
-
+import sys
 
 def imshow(inp, title):
     """Imshow for Tensor."""
@@ -50,15 +19,6 @@ def imshow(inp, title):
     plt.imshow(inp)
     plt.title(title)
     plt.show()
-
-
-# Get a batch of training data
-inputs, classes = next(iter(dataloaders['train']))
-
-# Make a grid from batch
-out = torchvision.utils.make_grid(inputs)
-
-imshow(out, title=[class_names[x] for x in classes])
 
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
@@ -127,16 +87,54 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     model.load_state_dict(best_model_wts)
     return model
 
+mean = np.array([0.5, 0.5, 0.5])
+std = np.array([0.25, 0.25, 0.25])
+
+data_transforms = {
+    'train': transforms.Compose([
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std)
+    ]),
+    'val': transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std)
+    ]),
+}
+
+data_dir = 'data/transfer_learning'
+image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
+                                          data_transforms[x])
+                  for x in ['train', 'val']}
+dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4,
+                                             shuffle=True, num_workers=0)
+              for x in ['train', 'val']}
+dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+print(dataset_sizes)
+
+class_names = image_datasets['train'].classes
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(class_names)
+
+# Get a batch of training data
+inputs, classes = next(iter(dataloaders['train']))
+
+# Make a grid from batch
+out = torchvision.utils.make_grid(inputs)
+
+imshow(out, title=[class_names[x] for x in classes])
 
 #### Finetuning the convnet ####
 # Load a pretrained model and reset final fully connected layer.
-
 model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 num_ftrs = model.fc.in_features
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
 model.fc = nn.Linear(num_ftrs, 2)
-
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
@@ -155,8 +153,8 @@ optimizer = optim.SGD(model.parameters(), lr=0.001)
 
 step_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
-model = train_model(model, criterion, optimizer, step_lr_scheduler, num_epochs=25)
-
+model = train_model(model, criterion, optimizer, 
+                    step_lr_scheduler, num_epochs=25)
 
 #### ConvNet as fixed feature extractor ####
 # Here, we need to freeze all the network except the final layer.
@@ -168,18 +166,13 @@ for param in model_conv.parameters():
 # Parameters of newly constructed modules have requires_grad=True by default
 num_ftrs = model_conv.fc.in_features
 model_conv.fc = nn.Linear(num_ftrs, 2)
-
 model_conv = model_conv.to(device)
 
-criterion = nn.CrossEntropyLoss()
 
-# Observe that only parameters of final layer are being optimized as
-# opposed to before.
-optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
+optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.7)
 
-# Decay LR by a factor of 0.1 every 7 epochs
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
-                         exp_lr_scheduler, num_epochs=25)
+                        exp_lr_scheduler, num_epochs=25)
 

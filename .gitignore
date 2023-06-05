@@ -1,2 +1,3 @@
 data/MNIST
 cifar-*
+data/transfer_learning
